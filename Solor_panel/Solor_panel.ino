@@ -12,6 +12,7 @@ SFE_TSL2561 light;
 
 boolean gain;     // Gain setting, 0 = X1, 1 = X16;
 unsigned int ms;  // Integration ("shutter") time in milliseconds
+double spot[12];
 
 void setup()
 {
@@ -54,22 +55,7 @@ void setup()
     byte error = light.getError();
     printError(error);
   }
-
-  // The light sensor has a default integration time of 402ms,
-  // and a default gain of low (1X).
-  
-  // If you would like to change either of these, you can
-  // do so using the setTiming() command.
-  
-  // If gain = false (0), device is set to low gain (1X)
-  // If gain = high (1), device is set to high gain (16X)
-
   gain = 0;
-
-  // If time = 0, integration will be 13.7ms
-  // If time = 1, integration will be 101ms
-  // If time = 2, integration will be 402ms
-  // If time = 3, use manual start / stop to perform your own integration
 
   unsigned char time = 2;
 
@@ -91,73 +77,46 @@ void setup()
 
 void loop()
 {
-  // Wait between measurements before retrieving the result
-  // (You can also configure the sensor to issue an interrupt
-  // when measurements are complete)
-  
-  // This sketch uses the TSL2561's built-in integration timer.
-  // You can also perform your own manual integration timing
-  // by setting "time" to 3 (manual) in setTiming(),
-  // then performing a manualStart() and a manualStop() as in the below
-  // commented statements:
-  
-  // ms = 1000;
-  // light.manualStart();
+
+
   delay(ms);
-  // light.manualStop();
-  
-  // Once integration is complete, we'll retrieve the data.
-  
-  // There are two light sensors on the device, one for visible light
-  // and one for infrared. Both sensors are needed for lux calculations.
-  
-  // Retrieve the data from the device:
-
   unsigned int data0, data1;
+  int bestSpot = 0;
+  for(int i =0; i <12; i++){
+    if (light.getData(data0,data1))
+    { 
+      Serial.print("data0: ");
+      Serial.print(data0);
+      Serial.print(" data1: ");
+      Serial.print(data1);    
+      double lux;    // Resulting lux value
+      boolean good;  // True if neither sensor is saturated
+      good = light.getLux(gain,ms,data0,data1,lux);
+      Serial.print(" lux: ");
+      Serial.print(lux);
+      if (good) Serial.println(" (good)"); else Serial.println(" (BAD)");
+      motor.step(400);
+      spot[i] = lux;
+      if(spot[i] >spot [bestSpot]){
+        bestSpot = i;
+      }
+    }
+    else
+    {
+      // getData() returned false because of an I2C error, inform the user.
   
-  if (light.getData(data0,data1))
-  {
-    // getData() returned true, communication was successful
-    
-    Serial.print("data0: ");
-    Serial.print(data0);
-    Serial.print(" data1: ");
-    Serial.print(data1);
-  
-    // To calculate lux, pass all your settings and readings
-    // to the getLux() function.
-    
-    // The getLux() function will return 1 if the calculation
-    // was successful, or 0 if one or both of the sensors was
-    // saturated (too much light). If this happens, you can
-    // reduce the integration time and/or gain.
-    // For more information see the hookup guide at: https://learn.sparkfun.com/tutorials/getting-started-with-the-tsl2561-luminosity-sensor
-  
-    double lux;    // Resulting lux value
-    boolean good;  // True if neither sensor is saturated
-    
-    // Perform lux calculation:
-
-    good = light.getLux(gain,ms,data0,data1,lux);
-    
-    // Print out the results:
-  
-    Serial.print(" lux: ");
-    Serial.print(lux);
-    if (good) Serial.println(" (good)"); else Serial.println(" (BAD)");
+      byte error = light.getError();
+      printError(error);
+      i--;
+    }
   }
-  else
-  {
-    // getData() returned false because of an I2C error, inform the user.
-
-    byte error = light.getError();
-    printError(error);
+  for(int i =0; i < 12-bestSpot;i++){
+    motor.step(-400);
   }
-
-  motor.step(1000);
-  delay(2000);
-  motor.step(-1000);
-  delay(2000);
+  delay(10000);
+  for(int i =0; i < bestSpot;i++){
+    motor.step(-400);
+  }
 
 }
 
